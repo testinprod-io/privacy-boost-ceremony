@@ -1,0 +1,43 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - contracts
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (net/http.Response.Body).Close
+        - crypto/rand.Read
+        - fmt.Sscanf
+        - os.Remove
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST*"
+        - "-QF*"
+        - "-S1016"
+  exclusions:
+    paths:
+      - contracts
+    rules:
+      - path: "frontend/"
+        linters:
+          - unused
+          - errcheck

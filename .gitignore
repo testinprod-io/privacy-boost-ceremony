@@ -1,0 +1,30 @@
+# Go
+*.exe
+*.test
+*.out
+go.work
+go.work.sum
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# Ceremony state and caches
+circuit-setup/.state/
+circuit-setup/benchmark-cache/
+circuit-setup/benchmark-reports/
+*.db
+*.db-shm
+*.db-wal
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
