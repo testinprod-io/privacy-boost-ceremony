@@ -175,6 +175,9 @@ func runContribute(args []string) error {
 	if len(cfg.Circuits) == 0 {
 		return fmt.Errorf("no circuits configured")
 	}
+	if err := os.MkdirAll(cfg.StateDir, 0o755); err != nil {
+		return fmt.Errorf("create state directory: %w", err)
+	}
 	startAll := time.Now()
 	totalCircuits := len(cfg.Circuits)
 
