@@ -1,0 +1,169 @@
+name: Ceremony Release
+
+on:
+  push:
+    tags:
+      - 'ceremony/v*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (for example 1.2.3 or v1.2.3)'
+        type: string
+        required: true
+      dry_run:
+        description: 'Dry run (build only, no publish)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      dry_run: ${{ steps.meta.outputs.dry_run }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            RAW_VERSION="${{ inputs.version }}"
+            DRY_RUN="${{ inputs.dry_run }}"
+          else
+            RAW_VERSION="${GITHUB_REF#refs/tags/}"
+            RAW_VERSION="${RAW_VERSION#ceremony/}"
+            DRY_RUN=false
+          fi
+
+          if [[ -z "${RAW_VERSION}" ]]; then
+            echo "Release version is required."
+            exit 1
+          fi
+
+          VERSION="${RAW_VERSION#v}"
+          TAG="v${VERSION}"
+
+          if [[ "${VERSION}" == *-* ]]; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${DRY_RUN}" >> "$GITHUB_OUTPUT"
+
+  build-cli:
+    name: CLI (${{ matrix.asset }})
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            asset: ceremony-linux-amd64
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            asset: ceremony-linux-arm64
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            asset: ceremony-darwin-amd64
+          - runner: macos-14
+            goos: darwin
+            goarch: arm64
+            asset: ceremony-darwin-arm64
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build ceremony CLI
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p release
+          go build -trimpath -buildvcs=false -o release/ceremony ./cmd/ceremony
+
+      - name: Smoke test binary
+        if: matrix.goos == runner.os || (matrix.goos == 'linux' && runner.os == 'Linux') || (matrix.goos == 'darwin' && runner.os == 'macOS')
+        shell: bash
+        run: |
+          ./release/ceremony > smoke.out 2>&1 || true
+          grep -q "ceremony CLI" smoke.out
+
+      - name: Package release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          tar -czf "${{ matrix.asset }}.tar.gz" ceremony
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${{ matrix.asset }}.tar.gz" > "${{ matrix.asset }}.tar.gz.sha256"
+          else
+            shasum -a 256 "${{ matrix.asset }}.tar.gz" > "${{ matrix.asset }}.tar.gz.sha256"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            release/${{ matrix.asset }}.tar.gz
+            release/${{ matrix.asset }}.tar.gz.sha256
+          retention-days: 3
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [validate, build-cli]
+    if: needs.validate.outputs.dry_run == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Ceremony v${{ needs.validate.outputs.version }}
+          draft: false
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            artifacts/ceremony-*/*.tar.gz
+            artifacts/ceremony-*/*.tar.gz.sha256
+
+  dry-run-summary:
+    name: Dry Run Summary
+    needs: [validate, build-cli]
+    if: needs.validate.outputs.dry_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## Dry Run Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tag: ${{ needs.validate.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ceremony release artifacts built successfully. Run without dry_run to publish." >> "$GITHUB_STEP_SUMMARY"

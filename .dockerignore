@@ -1,0 +1,8 @@
+**/.git
+**/.git/**
+.github
+.golangci.yml
+*.md
+LICENSE
+circuit-setup/contribute.sh
+circuit-setup/contributor-guide.md
