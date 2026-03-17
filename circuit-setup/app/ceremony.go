@@ -184,6 +184,12 @@ func runContribute(args []string) error {
 		return err
 	}
 
+	fmt.Println("")
+	fmt.Println("  Welcome to the Privacy Boost Trusted Setup Ceremony!")
+	fmt.Println("  Your contribution helps secure the system for everyone.")
+	fmt.Printf("  You will contribute to %d circuits. This may take 10-15 minutes.\n", len(circuits))
+	fmt.Println("")
+
 	startAll := time.Now()
 	totalCircuits := len(circuits)
 
@@ -194,8 +200,14 @@ func runContribute(args []string) error {
 	}
 	v.Printf("[ceremony][contribute] session_acquired participant=%s\n", participantID)
 
+	type circuitResult struct {
+		id        string
+		status    string
+		hashHex   string
+		createdAt string
+	}
 	engine := phase2.NewEngine()
-	records := make([]any, 0, totalCircuits)
+	results := make([]circuitResult, 0, totalCircuits)
 	processed := 0
 	skipped := 0
 	contributed := 0
@@ -228,6 +240,7 @@ func runContribute(args []string) error {
 				totalCircuits,
 				claim.SkipReason,
 			)
+			results = append(results, circuitResult{id: circuitID, status: "skipped (" + claim.SkipReason + ")"})
 			processed++
 			skipped++
 			percent := (processed * 100) / totalCircuits
@@ -291,7 +304,6 @@ func runContribute(args []string) error {
 			time.Since(startLocal).Milliseconds(),
 		)
 
-		var rec any
 		// Submit lets coordinator verify transition and persist accepted output.
 		v.Printf(
 			"[ceremony][contribute][%s] step=4/4 circuit=%d/%d submit_start lease=%s\n",
@@ -300,6 +312,10 @@ func runContribute(args []string) error {
 			totalCircuits,
 			claim.LeaseID,
 		)
+		var submitResp struct {
+			HashHex   string `json:"hashHex"`
+			CreatedAt string `json:"createdAt"`
+		}
 		if err := submitOutputArtifact(
 			*coordinatorURL,
 			sessionToken,
@@ -307,12 +323,17 @@ func runContribute(args []string) error {
 			claim.LeaseID,
 			false,
 			outputPath,
-			&rec,
+			&submitResp,
 			v,
 		); err != nil {
 			return fmt.Errorf("submit failed for %s: %w", circuitID, err)
 		}
-		records = append(records, rec)
+		results = append(results, circuitResult{
+			id:        circuitID,
+			status:    "contributed",
+			hashHex:   submitResp.HashHex,
+			createdAt: submitResp.CreatedAt,
+		})
 		processed++
 		contributed++
 		percent := (processed * 100) / totalCircuits
@@ -331,18 +352,73 @@ func runContribute(args []string) error {
 		_ = os.Remove(inputPath)
 		_ = os.Remove(outputPath)
 	}
-	v.Printf(
-		"\n[ceremony][contribute] complete processed=%d/%d contributed=%d skipped=%d elapsed=%s\n",
-		processed,
-		totalCircuits,
-		contributed,
-		skipped,
+	// Print contribution summary table.
+	fmt.Println("")
+	fmt.Println("  Contribution Summary")
+	fmt.Println("  " + strings.Repeat("─", 52))
+	fmt.Printf("  %-10s %-16s %s\n", "Circuit", "Status", "Hash")
+	fmt.Println("  " + strings.Repeat("─", 52))
+	for _, r := range results {
+		marker := "✓"
+		hash := ""
+		if r.status != "contributed" {
+			marker = "–"
+		}
+		if r.hashHex != "" && len(r.hashHex) >= 16 {
+			hash = r.hashHex[:16] + "..."
+		} else if r.hashHex != "" {
+			hash = r.hashHex
+		}
+		fmt.Printf("  %-10s %s %-14s %s\n", r.id, marker, r.status, hash)
+	}
+	fmt.Println("  " + strings.Repeat("─", 52))
+	fmt.Printf("  %d/%d contributed, %d skipped (elapsed %s)\n",
+		contributed, totalCircuits, skipped,
 		time.Since(startAll).Round(time.Second),
 	)
+	fmt.Println("")
 
-	// Print machine-readable results for scripting and local auditing.
-	b, _ := json.MarshalIndent(records, "", "  ")
-	fmt.Println(string(b))
+	// Offer to save a receipt file for later verification.
+	fmt.Println("  Save a receipt file? After the ceremony is finalized, you can use")
+	fmt.Println("  it to verify your contributions are included in the published bundle.")
+	fmt.Print("  Save receipt? [Y/n]: ")
+	var answer string
+	fmt.Scanln(&answer)
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	if answer == "" || answer == "y" || answer == "yes" {
+		type receiptEntry struct {
+			CircuitID string `json:"circuitId"`
+			Status    string `json:"status"`
+			Hash      string `json:"hash,omitempty"`
+			CreatedAt string `json:"createdAt,omitempty"`
+		}
+		receipt := struct {
+			Participant string         `json:"participant"`
+			Circuits    []receiptEntry `json:"circuits"`
+		}{
+			Participant: participantID,
+			Circuits:    make([]receiptEntry, 0, len(results)),
+		}
+		for _, r := range results {
+			receipt.Circuits = append(receipt.Circuits, receiptEntry{
+				CircuitID: r.id,
+				Status:    r.status,
+				Hash:      r.hashHex,
+				CreatedAt: r.createdAt,
+			})
+		}
+		receiptPath := filepath.Join(absStateDir, "contribution-receipt.json")
+		if b, err := json.MarshalIndent(receipt, "", "  "); err == nil {
+			if err := os.WriteFile(receiptPath, b, 0o644); err == nil {
+				fmt.Printf("\n  Receipt saved to %s\n\n", receiptPath)
+			}
+		}
+	}
+
+	fmt.Println("  Thank you for contributing to the Privacy Boost ceremony!")
+	fmt.Println("  Your participation strengthens the security of the protocol.")
+	fmt.Println("")
+
 	return nil
 }
 
@@ -361,7 +437,23 @@ func runAuthFlow(v verbosity, coordinatorURL string) (string, string, error) {
 	}
 
 	// User completes approval in browser while coordinator holds polling context.
-	fmt.Printf("Open %s and enter code %s\n", start.VerificationURI, start.UserCode)
+	const boxW = 54 // inner width between │ and │
+	pad := func(s string) string {
+		if len(s) >= boxW {
+			return s
+		}
+		return s + strings.Repeat(" ", boxW-len(s))
+	}
+	fmt.Println("")
+	fmt.Println("  ┌" + strings.Repeat("─", boxW) + "┐")
+	fmt.Println("  │" + pad("  GitHub Authentication Required") + "│")
+	fmt.Println("  │" + pad("") + "│")
+	fmt.Println("  │" + pad("  1. Open:  "+start.VerificationURI) + "│")
+	fmt.Println("  │" + pad("  2. Enter: "+start.UserCode) + "│")
+	fmt.Println("  │" + pad("") + "│")
+	fmt.Println("  │" + pad("  Waiting for approval...") + "│")
+	fmt.Println("  └" + strings.Repeat("─", boxW) + "┘")
+	fmt.Println("")
 
 	// Coordinator polls GitHub and returns coordinator-issued session identity.
 	v.Printf("[ceremony][auth] waiting_for_github_approval\n")
