@@ -303,46 +303,32 @@ do_build_and_run_docker() {
   docker build -t ceremony-build -f "${repo}/Dockerfile" "${repo}"
 
   log_ok "Build complete."
-  echo ""
-  log "Starting contribution in Docker container..."
-  log "  Coordinator: ${COORDINATOR_URL}"
-  log "  You will be asked to open a URL in your browser for GitHub authentication."
-  echo ""
 
   docker run --rm -it \
     ceremony-build \
     contribute \
     --coordinator-url "$COORDINATOR_URL"
-
-  log_ok "Contribution complete. Thank you!"
 }
 
 # ── Contribution ──────────────────────────────────────────────────────────────
 
 run_contribution() {
-  log "Starting contribution..."
-  log "  Coordinator: ${COORDINATOR_URL}"
-  echo ""
-
   "$CEREMONY_BIN" contribute \
     --coordinator-url "$COORDINATOR_URL"
-
-  log_ok "Contribution complete. Thank you!"
 }
 
 # ── Interactive menu ──────────────────────────────────────────────────────────
 
 show_banner() {
-  cat <<'BANNER'
-
-  ╔══════════════════════════════════════════════════════════════╗
-  ║         Privacy Boost — Trusted Setup Ceremony              ║
-  ║                                                              ║
-  ║  Thank you for contributing to the ceremony!                 ║
-  ║  Your participation strengthens the security of the system.  ║
-  ╚══════════════════════════════════════════════════════════════╝
-
-BANNER
+  echo ""
+  echo "  ╔════════════════════════════════════════════════════════════╗"
+  echo "  ║  Privacy Boost - Trusted Setup Ceremony                    ║"
+  echo "  ║                                                            ║"
+  echo "  ║  Thank you for contributing to the ceremony!               ║"
+  echo "  ║  Your participation strengthens protocol security.         ║"
+  echo "  ║  This may take 10-15 minutes.                              ║"
+  echo "  ╚════════════════════════════════════════════════════════════╝"
+  echo ""
 }
 
 show_menu() {
@@ -396,10 +382,6 @@ main() {
     do_build_and_run_docker
     return 0
   fi
-
-  echo ""
-  log_ok "Ceremony binary: ${CEREMONY_BIN}"
-  echo ""
 
   run_contribution
 }
