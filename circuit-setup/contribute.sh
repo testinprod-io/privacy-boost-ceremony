@@ -109,7 +109,7 @@ resolve_release_tag() {
     return 0
   fi
 
-  log "Checking GitHub for the latest ceremony release..."
+  log "Checking GitHub for the latest ceremony release..." >&2
   local releases_json
   releases_json="$(curl -fsSL \
     -H "Accept: application/vnd.github+json" \
