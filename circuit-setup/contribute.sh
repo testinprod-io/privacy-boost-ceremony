@@ -135,8 +135,8 @@ for r in json.load(sys.stdin):
         break
 ' 2>/dev/null || true)"
   else
-    # Fallback: simple grep for tag pattern
-    tag="$(printf '%s' "$releases_json" | grep -o '"tag_name":\s*"ceremony/v[^"]*"' | head -1 | grep -o 'ceremony/v[^"]*' || true)"
+    # Fallback: simple grep for tag pattern (match both v* and ceremony/v*)
+    tag="$(printf '%s' "$releases_json" | grep -oE '"tag_name":\s*"(ceremony/v|v)[^"]*"' | head -1 | grep -oE '(ceremony/v|v)[^"]*' || true)"
   fi
 
   if [[ -z "$tag" ]]; then
