@@ -184,11 +184,7 @@ func runContribute(args []string) error {
 		return err
 	}
 
-	fmt.Println("")
-	fmt.Println("  Welcome to the Privacy Boost Trusted Setup Ceremony!")
-	fmt.Println("  Your contribution helps secure the system for everyone.")
-	fmt.Printf("  You will contribute to %d circuits. This may take 10-15 minutes.\n", len(circuits))
-	fmt.Println("")
+	fmt.Printf("\n  Contributing to %d circuits.\n\n", len(circuits))
 
 	startAll := time.Now()
 	totalCircuits := len(circuits)

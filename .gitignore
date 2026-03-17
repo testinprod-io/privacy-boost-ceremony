@@ -19,5 +19,8 @@ ceremony-state/
 .idea/
 .vscode/
 
+# Test scripts (local only)
+test-*.sh
+
 # OS
 .DS_Store
