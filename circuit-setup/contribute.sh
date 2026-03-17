@@ -9,10 +9,10 @@ set -euo pipefail
 #
 # Usage:
 #   curl -fsSLO https://raw.githubusercontent.com/testinprod-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
-#   bash contribute.sh
+#   bash contribute.sh --coordinator-url http://...
 #
 # Environment overrides:
-#   CEREMONY_COORDINATOR_URL   Coordinator server URL (required, or prompted)
+#   CEREMONY_COORDINATOR_URL   Coordinator server URL (or use --coordinator-url flag)
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,26 @@ COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-}"
 WORK_DIR=""
 CEREMONY_BIN=""
 RELEASE_TAG=""
+
+# ── Argument parsing ─────────────────────────────────────────────────────────
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --coordinator-url)
+      COORDINATOR_URL="$2"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: bash contribute.sh [--coordinator-url <url>]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown arg: $1" >&2
+      echo "Usage: bash contribute.sh [--coordinator-url <url>]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
