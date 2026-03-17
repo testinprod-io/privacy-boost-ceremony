@@ -13,7 +13,7 @@ curl -fsSLO https://raw.githubusercontent.com/testinprod-io/privacy-boost-ceremo
 bash contribute.sh
 ```
 
-The script will prompt for the coordinator URL and config URL (provided by the ceremony coordinator), then present options to download a pre-built binary, build with local Go, or build with Docker.
+The script will prompt for the coordinator URL (provided by the ceremony coordinator), then present options to download a pre-built binary, build with local Go, or build with Docker.
 
 See [Contributor Guide](circuit-setup/contributor-guide.md) for detailed instructions.
 
@@ -23,7 +23,7 @@ After the ceremony is finalized, verify the published bundle:
 
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony
-./bin/ceremony verify-public --config <CONFIG_PATH> --bundle-dir <BUNDLE_DIR>
+./bin/ceremony verify-public --bundle-dir <BUNDLE_DIR>
 ```
 
 ## License

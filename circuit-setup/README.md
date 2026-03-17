@@ -23,26 +23,16 @@ For more details, see `circuit-setup/contributor-guide.md`.
 
 ```bash
 # Contribute to the ceremony
-ceremony contribute --config <path> --coordinator-url <url>
+ceremony contribute --coordinator-url <url> [--state-dir <dir>] [--quiet]
 
 # Verify a published ceremony bundle offline
-ceremony verify-public --config <path> [--bundle-dir <dir>] \
-  [--require-anchor] [--rpc-url <url>] \
+ceremony verify-public --bundle-dir <dir> [--quiet]
+  [--require-anchor] [--rpc-url <url>]
   [--anchor-chain-id <id>] [--anchor-tx-hash <hash>] [--min-confirmations <n>]
 ```
 
 ## Building
 
 ```bash
-go build -o ./bin/ceremony ./cmd/ceremony
+CGO_ENABLED=0 go build -o ./bin/ceremony ./cmd/ceremony
 ```
-
-## Verification
-
-After the ceremony is finalized, anyone can verify the published bundle:
-
-```bash
-ceremony verify-public --config <path> --bundle-dir <path/to/public>
-```
-
-This checks manifest integrity, hash chains, transcript linkage, and participant consistency — all offline from local files.

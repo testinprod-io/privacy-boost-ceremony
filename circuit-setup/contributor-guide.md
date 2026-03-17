@@ -23,13 +23,11 @@ The script presents an interactive menu:
 - **Option 2** clones the repo at the release tag and builds with your local Go toolchain.
 - **Option 3** clones the repo at the release tag and builds inside a Docker container. The contribution also runs inside the container.
 
-You will be prompted for:
-- **Coordinator URL** — provided by the ceremony coordinator
-- **Config URL** — URL to the ceremony config JSON, provided by the coordinator
+You will be prompted for the **coordinator URL** (provided by the ceremony coordinator). The circuit list is built into the binary.
 
 What to expect:
 
-- The script handles downloading or building the ceremony binary and fetching the config.
+- The script handles downloading or building the ceremony binary.
 - You will see a message like: `Open https://github.com/login/device and enter code XXXX-XXXX`.
   Follow the link, enter the code, and return to the terminal.
 - The CLI will proceed circuit-by-circuit until complete.
@@ -45,12 +43,10 @@ What to expect:
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony
 
-./bin/ceremony contribute \
-  --config <CONFIG_PATH> \
-  --coordinator-url <COORDINATOR_URL>
+./bin/ceremony contribute --coordinator-url <COORDINATOR_URL>
 ```
 
-To reduce output, add `--quiet`.
+To reduce output, add `--quiet`. To change the temp artifact directory, use `--state-dir <dir>` (defaults to `./ceremony-state`).
 
 The command:
 

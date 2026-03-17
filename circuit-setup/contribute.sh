@@ -11,15 +11,13 @@ set -euo pipefail
 #   curl -fsSLO https://raw.githubusercontent.com/testinprod-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
 #   bash contribute.sh
 #
-# Environment overrides (all optional):
-#   CEREMONY_COORDINATOR_URL   Coordinator server URL
-#   CEREMONY_CONFIG_URL        URL to download ceremony config JSON
+# Environment overrides:
+#   CEREMONY_COORDINATOR_URL   Coordinator server URL (required, or prompted)
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
 RELEASE_REPO="testinprod-io/privacy-boost-ceremony"
 COORDINATOR_URL="${CEREMONY_COORDINATOR_URL:-}"
-CONFIG_URL="${CEREMONY_CONFIG_URL:-}"
 
 WORK_DIR=""
 CEREMONY_BIN=""
@@ -291,69 +289,22 @@ do_build_and_run_docker() {
   log "  You will be asked to open a URL in your browser for GitHub authentication."
   echo ""
 
-  local config_path
-  config_path="$(download_config "${repo}/config")"
-
   docker run --rm -it \
-    -v "${config_path}:/work/ceremony.config.json:ro" \
     ceremony-build \
     contribute \
-    --config /work/ceremony.config.json \
     --coordinator-url "$COORDINATOR_URL"
 
   log_ok "Contribution complete. Thank you!"
 }
 
-# ── Config download ───────────────────────────────────────────────────────────
-
-download_config() {
-  local dest_dir="$1"
-  mkdir -p "$dest_dir"
-  local config_path="${dest_dir}/ceremony.config.json"
-
-  if [[ -z "$CONFIG_URL" ]]; then
-    log_err "No config URL provided."
-    log_err "Set CEREMONY_CONFIG_URL or pass it when prompted."
-    exit 1
-  fi
-
-  log "Downloading ceremony config..."
-  if ! curl -fsSL "$CONFIG_URL" -o "$config_path"; then
-    log_err "Failed to download config from ${CONFIG_URL}"
-    exit 1
-  fi
-  printf '%s\n' "$config_path"
-}
-
-# ── Config extraction ─────────────────────────────────────────────────────────
-
-extract_state_dir() {
-  local config_path="$1"
-  grep -o '"stateDir"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_path" \
-    | head -1 \
-    | sed 's/.*"stateDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
-}
-
 # ── Contribution ──────────────────────────────────────────────────────────────
 
 run_contribution() {
-  local config_path="$1"
-
-  local state_dir
-  state_dir="$(extract_state_dir "$config_path")"
-  if [[ -z "$state_dir" ]]; then
-    log_err "Could not read stateDir from config"
-    exit 1
-  fi
-  mkdir -p "$state_dir"
-
   log "Starting contribution..."
   log "  Coordinator: ${COORDINATOR_URL}"
-  log "  Config:      ${config_path}"
   echo ""
 
   "$CEREMONY_BIN" contribute \
-    --config "$config_path" \
     --coordinator-url "$COORDINATOR_URL"
 
   log_ok "Contribution complete. Thank you!"
@@ -398,24 +349,10 @@ prompt_coordinator_url() {
   fi
 }
 
-prompt_config_url() {
-  if [[ -n "$CONFIG_URL" ]]; then
-    return 0
-  fi
-  echo ""
-  printf '  Enter the ceremony config URL: '
-  read -r CONFIG_URL
-  if [[ -z "$CONFIG_URL" ]]; then
-    log_err "Config URL is required."
-    exit 1
-  fi
-}
-
 main() {
   show_banner
 
   prompt_coordinator_url
-  prompt_config_url
 
   local use_docker=false
 
@@ -444,16 +381,7 @@ main() {
   log_ok "Ceremony binary: ${CEREMONY_BIN}"
   echo ""
 
-  # Download config
-  local config_dir="${WORK_DIR:-$(mktemp -d)}"
-  if [[ -z "${WORK_DIR}" ]]; then
-    WORK_DIR="$config_dir"
-    trap cleanup EXIT
-  fi
-  local config_path
-  config_path="$(download_config "${config_dir}/config")"
-
-  run_contribution "$config_path"
+  run_contribution
 }
 
 main "$@"
