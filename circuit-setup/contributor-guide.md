@@ -46,7 +46,8 @@ go build -o ./bin/ceremony ./cmd/ceremony
 ./bin/ceremony contribute --coordinator-url <COORDINATOR_URL>
 ```
 
-To reduce output, add `--quiet`. To change the temp artifact directory, use `--state-dir <dir>` (defaults to `./ceremony-state`).
+To reduce output, add `--quiet`. To change the temp artifact directory, use
+`--state-dir <dir>` (defaults to `./ceremony-state`).
 
 The command:
 
@@ -55,12 +56,15 @@ The command:
 - downloads current input `.ph2` from coordinator
 - computes phase2 locally on contributor machine
 - uploads output `.ph2` to coordinator for verification and persistence
+- asks whether to save a detailed local receipt and keep local artifacts at the end of the run
 - prints contribution records
 
 ## Best Practices
 
 - Run with a stable machine and avoid interrupting the command.
 - Save command output for your local audit record.
+- Answer `yes` when prompted if you want to keep the richer receipt together
+  with the downloaded input and generated output in `ceremony-state`.
 - If interrupted, rerun `contribute`.
 
 ## Common Errors

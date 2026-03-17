@@ -3,6 +3,8 @@ package app
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -60,6 +62,27 @@ Commands:
 
 type verbosity struct {
 	quiet bool
+}
+
+// circuitResult captures the local and coordinator-visible record for one circuit.
+//
+// The contributor receipt is built from this structure after the full run
+// finishes. It intentionally records only non-secret material such as paths,
+// digests, and coordinator-issued transcript hashes so contributors retain a
+// richer audit trail without persisting the randomness used during contribution.
+type circuitResult struct {
+	id                string
+	status            string
+	hashHex           string
+	createdAt         string
+	leaseID           string
+	inputDownloadPath string
+	inputPath         string
+	outputPath        string
+	inputSHA256       string
+	outputSHA256      string
+	inputBytes        int64
+	outputBytes       int64
 }
 
 func (v verbosity) Printf(format string, args ...any) {
@@ -196,12 +219,6 @@ func runContribute(args []string) error {
 	}
 	v.Printf("[ceremony][contribute] session_acquired participant=%s\n", participantID)
 
-	type circuitResult struct {
-		id        string
-		status    string
-		hashHex   string
-		createdAt string
-	}
 	engine := phase2.NewEngine()
 	results := make([]circuitResult, 0, totalCircuits)
 	processed := 0
@@ -281,6 +298,13 @@ func runContribute(args []string) error {
 			return fmt.Errorf("input download failed for %s: %w", circuitID, err)
 		}
 
+		// Capture immutable metadata for the exact input artifact this contributor
+		// received before any local phase2 work begins.
+		inputSHA256, inputBytes, err := describeLocalArtifact(inputPath)
+		if err != nil {
+			return fmt.Errorf("describe input artifact for %s: %w", circuitID, err)
+		}
+
 		// Phase2 contribution computation is intentionally local on contributor machine.
 		v.Printf(
 			"[ceremony][contribute][%s] step=3/4 circuit=%d/%d local_contribute_start\n",
@@ -292,6 +316,14 @@ func runContribute(args []string) error {
 		if err := engine.Contribute(inputPath, outputPath); err != nil {
 			return fmt.Errorf("local contribute failed for %s: %w", circuitID, err)
 		}
+
+		// Record the locally generated output digest before upload so the receipt
+		// preserves what was actually submitted to the coordinator.
+		outputSHA256, outputBytes, err := describeLocalArtifact(outputPath)
+		if err != nil {
+			return fmt.Errorf("describe output artifact for %s: %w", circuitID, err)
+		}
+
 		v.Printf(
 			"[ceremony][contribute][%s] step=3/4 circuit=%d/%d local_contribute_complete ms=%d\n",
 			circuitID,
@@ -325,10 +357,18 @@ func runContribute(args []string) error {
 			return fmt.Errorf("submit failed for %s: %w", circuitID, err)
 		}
 		results = append(results, circuitResult{
-			id:        circuitID,
-			status:    "contributed",
-			hashHex:   submitResp.HashHex,
-			createdAt: submitResp.CreatedAt,
+			id:                circuitID,
+			status:            "contributed",
+			hashHex:           submitResp.HashHex,
+			createdAt:         submitResp.CreatedAt,
+			leaseID:           claim.LeaseID,
+			inputDownloadPath: claim.InputDownloadPath,
+			inputPath:         inputPath,
+			outputPath:        outputPath,
+			inputSHA256:       inputSHA256,
+			outputSHA256:      outputSHA256,
+			inputBytes:        inputBytes,
+			outputBytes:       outputBytes,
 		})
 		processed++
 		contributed++
@@ -343,11 +383,8 @@ func runContribute(args []string) error {
 			percent,
 			time.Since(startAll).Round(time.Second),
 		)
-
-		// Best-effort cleanup; failure here should not invalidate accepted contribution.
-		_ = os.Remove(inputPath)
-		_ = os.Remove(outputPath)
 	}
+
 	// Print contribution summary table.
 	fmt.Println("")
 	fmt.Println("  Contribution Summary")
@@ -374,7 +411,9 @@ func runContribute(args []string) error {
 	)
 	fmt.Println("")
 
-	// Offer to save a receipt file for later verification.
+	receiptPath := filepath.Join(absStateDir, "contribution-receipt.json")
+	// Keep the original interactive receipt flow so contributors explicitly
+	// choose whether to persist a local receipt at the end of the run.
 	fmt.Println("  Save a receipt file? After the ceremony is finalized, you can use")
 	fmt.Println("  it to verify your contributions are included in the published bundle.")
 	fmt.Print("  Save receipt? [Y/n]: ")
@@ -382,32 +421,25 @@ func runContribute(args []string) error {
 	fmt.Scanln(&answer)
 	answer = strings.TrimSpace(strings.ToLower(answer))
 	if answer == "" || answer == "y" || answer == "yes" {
-		type receiptEntry struct {
-			CircuitID string `json:"circuitId"`
-			Status    string `json:"status"`
-			Hash      string `json:"hash,omitempty"`
-			CreatedAt string `json:"createdAt,omitempty"`
+		// The saved receipt now uses the richer local metadata format even
+		// though the user prompt remains the same as before.
+		if err := writeContributionReceipt(
+			receiptPath,
+			participantID,
+			*coordinatorURL,
+			absStateDir,
+			results,
+		); err != nil {
+			fmt.Printf("  Warning: contribution succeeded, but receipt could not be saved: %v\n", err)
+		} else {
+			fmt.Printf("\n  Receipt saved to %s\n\n", receiptPath)
 		}
-		receipt := struct {
-			Participant string         `json:"participant"`
-			Circuits    []receiptEntry `json:"circuits"`
-		}{
-			Participant: participantID,
-			Circuits:    make([]receiptEntry, 0, len(results)),
-		}
-		for _, r := range results {
-			receipt.Circuits = append(receipt.Circuits, receiptEntry{
-				CircuitID: r.id,
-				Status:    r.status,
-				Hash:      r.hashHex,
-				CreatedAt: r.createdAt,
-			})
-		}
-		receiptPath := filepath.Join(absStateDir, "contribution-receipt.json")
-		if b, err := json.MarshalIndent(receipt, "", "  "); err == nil {
-			if err := os.WriteFile(receiptPath, b, 0o644); err == nil {
-				fmt.Printf("\n  Receipt saved to %s\n\n", receiptPath)
-			}
+	} else {
+		// If the contributor declines the receipt, also clean up the local input
+		// and output artifacts so the default experience remains close to the
+		// original flow of not retaining extra local state.
+		if err := cleanupContributionArtifacts(results); err != nil {
+			fmt.Printf("  Warning: contribution succeeded, but local cleanup failed: %v\n", err)
 		}
 	}
 
@@ -416,6 +448,138 @@ func runContribute(args []string) error {
 	fmt.Println("")
 
 	return nil
+}
+
+// writeContributionReceipt persists the contributor's local audit record to disk.
+//
+// The receipt keeps coordinator-issued transcript information together with local
+// artifact digests and file paths so a contributor can later demonstrate what was
+// downloaded, what was produced locally, and which accepted contribution hash the
+// coordinator returned. All stored fields are intentionally non-secret.
+func writeContributionReceipt(
+	receiptPath, participantID, coordinatorURL, stateDir string,
+	results []circuitResult,
+) error {
+	type receiptEntry struct {
+		CircuitID         string `json:"circuitId"`
+		Status            string `json:"status"`
+		Hash              string `json:"hash,omitempty"`
+		CreatedAt         string `json:"createdAt,omitempty"`
+		LeaseID           string `json:"leaseId,omitempty"`
+		InputDownloadPath string `json:"inputDownloadPath,omitempty"`
+		InputPath         string `json:"inputPath,omitempty"`
+		InputSHA256       string `json:"inputSha256,omitempty"`
+		InputBytes        int64  `json:"inputBytes,omitempty"`
+		OutputPath        string `json:"outputPath,omitempty"`
+		OutputSHA256      string `json:"outputSha256,omitempty"`
+		OutputBytes       int64  `json:"outputBytes,omitempty"`
+	}
+	type receipt struct {
+		Participant    string         `json:"participant"`
+		CoordinatorURL string         `json:"coordinatorUrl"`
+		StateDir       string         `json:"stateDir"`
+		GeneratedAt    string         `json:"generatedAt"`
+		Circuits       []receiptEntry `json:"circuits"`
+	}
+
+	// Build a structured, backwards-compatible receipt document that preserves
+	// the original participant/circuit summary while enriching each circuit with
+	// the local artifact metadata gathered during the run.
+	out := receipt{
+		Participant:    participantID,
+		CoordinatorURL: coordinatorURL,
+		StateDir:       stateDir,
+		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
+		Circuits:       make([]receiptEntry, 0, len(results)),
+	}
+	for _, r := range results {
+		out.Circuits = append(out.Circuits, receiptEntry{
+			CircuitID:         r.id,
+			Status:            r.status,
+			Hash:              r.hashHex,
+			CreatedAt:         r.createdAt,
+			LeaseID:           r.leaseID,
+			InputDownloadPath: r.inputDownloadPath,
+			InputPath:         r.inputPath,
+			InputSHA256:       r.inputSHA256,
+			InputBytes:        r.inputBytes,
+			OutputPath:        r.outputPath,
+			OutputSHA256:      r.outputSHA256,
+			OutputBytes:       r.outputBytes,
+		})
+	}
+
+	// Serialize once and write atomically enough for a local CLI workflow. The
+	// receipt lives alongside the saved artifacts inside the contributor state
+	// directory so users can archive or inspect one directory tree.
+	b, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(receiptPath, b, 0o644)
+}
+
+// cleanupContributionArtifacts removes local input/output files when the user
+// declines to save the richer local receipt.
+//
+// This cleanup is intentionally best-effort and only touches the local
+// contributor machine. The accepted coordinator-side contribution record is
+// already persisted by the time this function runs, so a cleanup failure does
+// not affect ceremony correctness.
+func cleanupContributionArtifacts(results []circuitResult) error {
+	// Deduplicate paths so one circuit result cannot cause repeated delete
+	// attempts for the same local file.
+	paths := make([]string, 0, len(results)*2)
+	seen := make(map[string]struct{}, len(results)*2)
+	for _, r := range results {
+		for _, path := range []string{r.inputPath, r.outputPath} {
+			if path == "" {
+				continue
+			}
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
+		}
+	}
+
+	// Remove each local artifact and ignore already-missing files so repeated or
+	// manual cleanup remains harmless.
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+// describeLocalArtifact returns the SHA256 digest and byte size for one file.
+//
+// The contributor receipt uses these values to bind a saved local artifact path
+// to the exact bytes that existed on disk at download or submit time, which is
+// more durable than recording only filenames.
+func describeLocalArtifact(path string) (string, int64, error) {
+	// Open and stat the file first so the helper can return both digest and size
+	// without requiring the caller to walk the same file twice.
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Stream the file through SHA256 rather than loading it into memory so the
+	// helper remains safe for large `.ph2` artifacts.
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), info.Size(), nil
 }
 
 // runAuthFlow completes GitHub Device Flow and returns session token + participant ID.
