@@ -304,10 +304,20 @@ do_build_and_run_docker() {
 
   log_ok "Build complete."
 
+  local state_dir="${repo}/ceremony-state"
+  mkdir -p "$state_dir"
+
   docker run --rm -it \
+    -v "${state_dir}:/work/ceremony-state" \
     ceremony-build \
     contribute \
     --coordinator-url "$COORDINATOR_URL"
+
+  # Copy receipt to current directory before cleanup removes the temp dir
+  if [[ -f "${state_dir}/contribution-receipt.json" ]]; then
+    cp "${state_dir}/contribution-receipt.json" "${PWD}/contribution-receipt.json"
+    log_ok "Receipt copied to ${PWD}/contribution-receipt.json"
+  fi
 }
 
 # ── Contribution ──────────────────────────────────────────────────────────────
