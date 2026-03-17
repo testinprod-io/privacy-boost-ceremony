@@ -6,15 +6,14 @@ The ceremony uses Groth16 multi-party computation (MPC) via [gnark](https://gith
 
 ## Quick Start
 
+No need to clone the repository — just download and run:
+
 ```bash
-git clone https://github.com/testinprod-io/privacy-boost-ceremony.git
-cd privacy-boost-ceremony
-bash circuit-setup/contribute_quickstart.sh \
-  --config <CONFIG_PATH> \
-  --coordinator-url <COORDINATOR_URL>
+curl -fsSLO https://raw.githubusercontent.com/testinprod-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
+bash contribute.sh
 ```
 
-The coordinator will provide the config file and URL before the ceremony begins.
+The script will prompt for the coordinator URL (provided by the ceremony coordinator), then present options to download a pre-built binary, build with local Go, or build with Docker.
 
 See [Contributor Guide](circuit-setup/contributor-guide.md) for detailed instructions.
 
@@ -24,7 +23,7 @@ After the ceremony is finalized, verify the published bundle:
 
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony
-./bin/ceremony verify-public --config <CONFIG_PATH> --bundle-dir <BUNDLE_DIR>
+./bin/ceremony verify-public --bundle-dir <BUNDLE_DIR>
 ```
 
 ## License

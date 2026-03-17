@@ -5,18 +5,11 @@
 go.work
 go.work.sum
 
-# Foundry
-contracts/out/
-contracts/cache/
-contracts/broadcast/
+# Build output
+bin/
 
-# Ceremony state and caches
-circuit-setup/.state/
-circuit-setup/benchmark-cache/
-circuit-setup/benchmark-reports/
-*.db
-*.db-shm
-*.db-wal
+# Ceremony state
+ceremony-state/
 
 # Environment files
 .env

@@ -4,62 +4,49 @@ This guide explains how participants contribute to the Privacy Boost trusted set
 
 ## Quickstart (Recommended)
 
-From the repository root, run:
+Download and run the standalone contributor script — no need to clone the repository first:
 
 ```bash
-git clone <REPO_URL>
-cd privacy-boost-ceremony
-bash circuit-setup/contribute_quickstart.sh \
-  --coordinator-url <COORDINATOR_URL> \
-  --config <CONFIG_PATH>
+curl -fsSLO https://raw.githubusercontent.com/testinprod-io/privacy-boost-ceremony/main/circuit-setup/contribute.sh
+bash contribute.sh
 ```
 
-The coordinator will provide the config file and coordinator URL before the ceremony begins.
+The script presents an interactive menu:
 
-Useful alternatives:
-
-```bash
-# Use a prebuilt ceremony binary instead of building locally.
-CEREMONY_BINARY_PATH=/path/to/ceremony \
-  bash circuit-setup/contribute_quickstart.sh \
-  --coordinator-url <COORDINATOR_URL> --config <CONFIG_PATH>
-
-# Pin quickstart to a specific ceremony release.
-CEREMONY_RELEASE_VERSION=1.2.3 \
-  bash circuit-setup/contribute_quickstart.sh \
-  --coordinator-url <COORDINATOR_URL> --config <CONFIG_PATH>
-
-# Build the ceremony binary in Docker.
-CEREMONY_BUILD_MODE=docker \
-  bash circuit-setup/contribute_quickstart.sh \
-  --coordinator-url <COORDINATOR_URL> --config <CONFIG_PATH>
 ```
+  1) Download pre-built release          (fastest)
+  2) Build from source (local Go)        (requires Go 1.24+)
+  3) Build from source (Docker)          (no local toolchain needed)
+```
+
+- **Option 1** downloads a verified pre-built binary from GitHub Releases.
+- **Option 2** clones the repo at the release tag and builds with your local Go toolchain.
+- **Option 3** clones the repo at the release tag and builds inside a Docker container. The contribution also runs inside the container.
+
+You will be prompted for the **coordinator URL** (provided by the ceremony coordinator). The circuit list is built into the binary.
 
 What to expect:
 
-- The script prints setup milestones such as checking tools, downloading/building the CLI, and completion.
-- It prefers a provided or existing `ceremony` binary first, then tries an official GitHub release binary, and only then falls back to building locally.
-- After setup, it starts the contribution flow.
+- The script handles downloading or building the ceremony binary.
 - You will see a message like: `Open https://github.com/login/device and enter code XXXX-XXXX`.
   Follow the link, enter the code, and return to the terminal.
 - The CLI will proceed circuit-by-circuit until complete.
 
 ## Requirements
 
-- Ceremony config file provided by the coordinator.
-- Either a prebuilt `ceremony` binary, a working local Go installation, or Docker.
+- **Option 1 (pre-built)**: `curl`, `tar`, and a checksum tool (`shasum` or `sha256sum`).
+- **Option 2 (local Go)**: Go 1.24+.
+- **Option 3 (Docker)**: Docker.
 
 ## Manual Flow
 
 ```bash
 go build -o ./bin/ceremony ./cmd/ceremony
 
-./bin/ceremony contribute \
-  --config <CONFIG_PATH> \
-  --coordinator-url <COORDINATOR_URL>
+./bin/ceremony contribute --coordinator-url <COORDINATOR_URL>
 ```
 
-To reduce output, add `--quiet`.
+To reduce output, add `--quiet`. To change the temp artifact directory, use `--state-dir <dir>` (defaults to `./ceremony-state`).
 
 The command:
 

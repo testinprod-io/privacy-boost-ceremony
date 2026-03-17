@@ -15,17 +15,45 @@ import (
 	"strings"
 	"time"
 
-	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/config"
-	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/model"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/phase2"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/publicbundle"
 )
 
+// circuit defines the minimal info the contributor client needs per circuit.
+type circuit struct {
+	ID   string
+	Type string
+}
+
+// circuits is the fixed production circuit list.
+var circuits = []circuit{
+	{ID: "s1", Type: "epoch"},
+	{ID: "s4", Type: "epoch"},
+	{ID: "s8", Type: "epoch"},
+	{ID: "s16", Type: "epoch"},
+	{ID: "s32", Type: "epoch"},
+	{ID: "s64", Type: "epoch"},
+	{ID: "s100", Type: "epoch"},
+	{ID: "m1", Type: "epoch"},
+	{ID: "m4", Type: "epoch"},
+	{ID: "m8", Type: "epoch"},
+	{ID: "l1", Type: "epoch"},
+	{ID: "l4", Type: "epoch"},
+	{ID: "l8", Type: "epoch"},
+	{ID: "sp1", Type: "epoch"},
+	{ID: "d1", Type: "deposit"},
+	{ID: "d8", Type: "deposit"},
+	{ID: "d32", Type: "deposit"},
+	{ID: "f8", Type: "forced"},
+}
+
+const defaultStateDir = "./ceremony-state"
+
 const ceremonyUsageText = `ceremony CLI
 
 Commands:
-  contribute --config path.json [--coordinator-url http://127.0.0.1:8787] [--quiet]
-  verify-public --config path.json [--bundle-dir /path/to/stateDir/public] [--quiet]
+  contribute --coordinator-url <url> [--state-dir <dir>] [--quiet]
+  verify-public --bundle-dir <dir> [--quiet]
     [--require-anchor] [--rpc-url https://rpc.example]
     [--anchor-chain-id 1] [--anchor-tx-hash 0x...] [--min-confirmations 12]
 `
@@ -89,11 +117,8 @@ func usage() {
 
 // runVerifyPublic validates a public export bundle offline from local files.
 func runVerifyPublic(args []string) error {
-	// Parse offline verifier inputs. Config is still required because stateDir
-	// is the default bundle location when --bundle-dir is omitted.
 	fs := flag.NewFlagSet("verify-public", flag.ContinueOnError)
-	configPath := fs.String("config", "", "ceremony config json")
-	bundleDir := fs.String("bundle-dir", "", "public bundle directory (default: <stateDir>/public)")
+	bundleDir := fs.String("bundle-dir", "", "public bundle directory (required)")
 	quiet := fs.Bool("quiet", false, "suppress non-essential output")
 	rpcURL := fs.String("rpc-url", "", "ethereum rpc url for onchain anchor verification")
 	anchorChainID := fs.String("anchor-chain-id", "", "anchor chain id for onchain verification (for example 1)")
@@ -105,9 +130,8 @@ func runVerifyPublic(args []string) error {
 	}
 	v := verbosity{quiet: *quiet}
 
-	// Enforce explicit config path so verifier behavior matches other commands.
-	if *configPath == "" {
-		return fmt.Errorf("--config required")
+	if *bundleDir == "" {
+		return fmt.Errorf("--bundle-dir required")
 	}
 
 	// In strict anchor mode, require explicit chain/tx parameters so verifier
@@ -122,22 +146,9 @@ func runVerifyPublic(args []string) error {
 		}
 	}
 
-	// Load config only for stateDir resolution; verification itself does not
-	// require coordinator API or coordinator process uptime.
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		return err
-	}
-
-	// Resolve bundle directory from flag or default stateDir/public convention.
-	targetBundleDir := *bundleDir
-	if targetBundleDir == "" {
-		targetBundleDir = filepath.Join(cfg.StateDir, "public")
-	}
-
 	// Run local-file verification against the exported public bundle.
-	v.Printf("[ceremony][verify-public] start bundleDir=%s requireAnchor=%t\n", targetBundleDir, *requireAnchor)
-	if err := publicbundle.VerifyIntegrity(targetBundleDir, publicbundle.VerifyOptions{
+	v.Printf("[ceremony][verify-public] start bundleDir=%s requireAnchor=%t\n", *bundleDir, *requireAnchor)
+	if err := publicbundle.VerifyIntegrity(*bundleDir, publicbundle.VerifyOptions{
 		RequireAnchor:    *requireAnchor,
 		RPCURL:           *rpcURL,
 		AnchorChainID:    *anchorChainID,
@@ -148,38 +159,36 @@ func runVerifyPublic(args []string) error {
 		return err
 	}
 
-	// Print success path so operators can script publication gates.
-	v.Printf("[ceremony][verify-public] verified bundleDir=%s\n", targetBundleDir)
+	v.Printf("[ceremony][verify-public] verified bundleDir=%s\n", *bundleDir)
 	return nil
 }
 
 // runContribute executes contributor-local flow: auth, claim, download, compute, submit.
 func runContribute(args []string) error {
-	// Parse CLI flags for contribute command.
 	fs := flag.NewFlagSet("contribute", flag.ContinueOnError)
-	configPath := fs.String("config", "", "ceremony config json")
-	coordinatorURL := fs.String("coordinator-url", "http://127.0.0.1:8787", "coordinator API URL")
+	coordinatorURL := fs.String("coordinator-url", "", "coordinator API URL (required)")
+	stateDir := fs.String("state-dir", defaultStateDir, "local directory for temporary artifacts")
 	quiet := fs.Bool("quiet", false, "suppress non-essential output")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	v := verbosity{quiet: *quiet}
-	if *configPath == "" {
-		return fmt.Errorf("--config required")
+	if *coordinatorURL == "" {
+		return fmt.Errorf("--coordinator-url required")
 	}
-	// Circuit list comes from config; contribute always runs all configured circuits.
-	cfg, err := config.Load(*configPath)
+	if err := os.MkdirAll(*stateDir, 0o755); err != nil {
+		return fmt.Errorf("create state directory: %w", err)
+	}
+	absStateDir, err := filepath.Abs(*stateDir)
 	if err != nil {
 		return err
 	}
-	if len(cfg.Circuits) == 0 {
-		return fmt.Errorf("no circuits configured")
-	}
+
 	startAll := time.Now()
-	totalCircuits := len(cfg.Circuits)
+	totalCircuits := len(circuits)
 
 	// Authenticate once, then reuse the same session token across all circuit contributions.
-	sessionToken, participantID, err := runAuthFlow(v, cfg, *coordinatorURL)
+	sessionToken, participantID, err := runAuthFlow(v, *coordinatorURL)
 	if err != nil {
 		return err
 	}
@@ -191,7 +200,7 @@ func runContribute(args []string) error {
 	skipped := 0
 	contributed := 0
 	// Each circuit uses its own lease and input/output artifact pair.
-	for i, c := range cfg.Circuits {
+	for i, c := range circuits {
 		circuitID := c.ID
 		circuitIndex := i + 1
 		v.Printf(
@@ -237,11 +246,11 @@ func runContribute(args []string) error {
 
 		// Use lease-qualified temp names to avoid collisions across retries/contributors.
 		inputPath := filepath.Join(
-			cfg.StateDir,
+			absStateDir,
 			fmt.Sprintf("contribute_input_%s_%s.ph2", circuitID, claim.LeaseID),
 		)
 		outputPath := filepath.Join(
-			cfg.StateDir,
+			absStateDir,
 			fmt.Sprintf("contribute_output_%s_%s.ph2", circuitID, claim.LeaseID),
 		)
 
@@ -338,12 +347,7 @@ func runContribute(args []string) error {
 }
 
 // runAuthFlow completes GitHub Device Flow and returns session token + participant ID.
-func runAuthFlow(v verbosity, cfg *model.CeremonyConfig, coordinatorURL string) (string, string, error) {
-	// Current contributor flow depends on coordinator-managed GitHub Device Flow.
-	if !cfg.GitHubAuth.Enabled {
-		return "", "", fmt.Errorf("github auth must be enabled")
-	}
-
+func runAuthFlow(v verbosity, coordinatorURL string) (string, string, error) {
 	// Start Device Flow and print instructions for browser-based approval.
 	var start struct {
 		DeviceCode      string `json:"device_code"`
