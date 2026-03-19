@@ -28,19 +28,22 @@ type ContributionManifest struct {
 
 // CircuitManifest commits all exported artifacts and transcript entries for one circuit.
 type CircuitManifest struct {
-	CircuitID         string                 `json:"circuitId"`
-	CircuitSpecJSON   string                 `json:"circuitSpecJson"`
-	CircuitSpecSHA256 string                 `json:"circuitSpecSha256"`
-	OriginPhase2Path  string                 `json:"originPhase2Path"`
-	OriginPhase2SHA   string                 `json:"originPhase2Sha256"`
-	FinalPhase2Path   string                 `json:"finalPhase2Path"`
-	FinalPhase2SHA    string                 `json:"finalPhase2Sha256"`
-	PKPath            string                 `json:"pkPath"`
-	PKSHA             string                 `json:"pkSha256"`
-	VKPath            string                 `json:"vkPath"`
-	VKSHA             string                 `json:"vkSha256"`
-	ContributionCount int                    `json:"contributionCount"`
-	Contributions     []ContributionManifest `json:"contributions"`
+	CircuitID          string                 `json:"circuitId"`
+	CircuitSpecJSON    string                 `json:"circuitSpecJson"`
+	CircuitSpecSHA256  string                 `json:"circuitSpecSha256"`
+	Phase1SHA256       string                 `json:"phase1Sha256"`
+	DerivedPhase1Power int                    `json:"derivedPhase1Power"`
+	R1CSSHA256         string                 `json:"r1csSha256"`
+	OriginPhase2Path   string                 `json:"originPhase2Path"`
+	OriginPhase2SHA    string                 `json:"originPhase2Sha256"`
+	FinalPhase2Path    string                 `json:"finalPhase2Path"`
+	FinalPhase2SHA     string                 `json:"finalPhase2Sha256"`
+	PKPath             string                 `json:"pkPath"`
+	PKSHA              string                 `json:"pkSha256"`
+	VKPath             string                 `json:"vkPath"`
+	VKSHA              string                 `json:"vkSha256"`
+	ContributionCount  int                    `json:"contributionCount"`
+	Contributions      []ContributionManifest `json:"contributions"`
 }
 
 // Manifest is the top-level public bundle schema consumed by offline verification.

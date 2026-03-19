@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/model"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/phase2"
 	"github.com/testinprod-io/privacy-boost-ceremony/circuit-setup/internal/publicbundle"
 )
@@ -171,7 +172,11 @@ func runVerifyPublic(args []string) error {
 
 	// Run local-file verification against the exported public bundle.
 	v.Printf("[ceremony][verify-public] start bundleDir=%s requireAnchor=%t\n", *bundleDir, *requireAnchor)
-	if err := publicbundle.VerifyIntegrity(*bundleDir, publicbundle.VerifyOptions{
+	cfg, err := loadVerifyConfigFromBundle(*bundleDir)
+	if err != nil {
+		return err
+	}
+	if err := publicbundle.Verify(*bundleDir, cfg, publicbundle.VerifyOptions{
 		RequireAnchor:    *requireAnchor,
 		RPCURL:           *rpcURL,
 		AnchorChainID:    *anchorChainID,
@@ -184,6 +189,54 @@ func runVerifyPublic(args []string) error {
 
 	v.Printf("[ceremony][verify-public] verified bundleDir=%s\n", *bundleDir)
 	return nil
+}
+
+// loadVerifyConfigFromBundle reconstructs the minimal verifier config from the
+// public bundle's exported config snapshot.
+//
+// The public verifier intentionally does not require an external coordinator
+// config file. Instead it reads the published snapshot, then fills in only the
+// local cache paths the offline verifier needs to compile circuits and resolve
+// phase1 artifacts on the verifier's own machine.
+func loadVerifyConfigFromBundle(bundleDir string) (*model.CeremonyConfig, error) {
+	manifestPath := filepath.Join(bundleDir, "manifest.json")
+	rawManifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read bundle manifest: %w", err)
+	}
+
+	var manifest publicbundle.Manifest
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		return nil, fmt.Errorf("parse bundle manifest: %w", err)
+	}
+
+	snapshotRel := filepath.Clean(strings.TrimSpace(manifest.ConfigSnapshotPath))
+	if snapshotRel == "" || snapshotRel == "." || filepath.IsAbs(snapshotRel) || strings.HasPrefix(snapshotRel, "..") {
+		return nil, fmt.Errorf("invalid config snapshot path in manifest")
+	}
+
+	snapshotPath := filepath.Join(bundleDir, snapshotRel)
+	rawSnapshot, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read config snapshot: %w", err)
+	}
+
+	var cfg model.CeremonyConfig
+	if err := json.Unmarshal(rawSnapshot, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config snapshot: %w", err)
+	}
+
+	ceremonyID := strings.TrimSpace(cfg.ID)
+	if ceremonyID == "" {
+		ceremonyID = "public-bundle"
+	}
+
+	// Keep verifier cache outside the bundle directory so verification does not
+	// mutate published artifacts while still reusing compiled/phase1 data across runs.
+	cacheRoot := filepath.Join(os.TempDir(), "privacy-boost-ceremony-verify-cache", ceremonyID)
+	cfg.StateDir = cacheRoot
+	cfg.Cache.RootDir = cacheRoot
+	return &cfg, nil
 }
 
 // runContribute executes contributor-local flow: auth, claim, download, compute, submit.
