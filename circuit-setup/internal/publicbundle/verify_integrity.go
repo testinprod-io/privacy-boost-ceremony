@@ -176,6 +176,9 @@ func verifyCircuit(bundleDir string, circuit CircuitManifest) error {
 	if circuit.CircuitSpecJSON == "" || circuit.CircuitSpecSHA256 == "" {
 		return fmt.Errorf("missing circuit spec commitment fields")
 	}
+	if circuit.Phase1SHA256 == "" || circuit.DerivedPhase1Power <= 0 || circuit.R1CSSHA256 == "" {
+		return fmt.Errorf("missing setup commitment fields")
+	}
 	specHash := sha256.Sum256([]byte(circuit.CircuitSpecJSON))
 	if hex.EncodeToString(specHash[:]) != circuit.CircuitSpecSHA256 {
 		return fmt.Errorf("circuit spec hash mismatch")
