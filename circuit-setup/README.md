@@ -31,6 +31,11 @@ ceremony verify-public --bundle-dir <dir> [--quiet]
   [--anchor-chain-id <id>] [--anchor-tx-hash <hash>] [--min-confirmations <n>]
 ```
 
+At the end of a successful `contribute` run, the CLI asks whether to save a
+richer `contribution-receipt.json`. If you answer `yes`, the receipt and local
+input/output `.ph2` artifacts are kept in the state directory. If you answer
+`no`, those local artifacts are cleaned up.
+
 ## Building
 
 ```bash

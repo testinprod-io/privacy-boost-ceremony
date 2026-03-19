@@ -313,10 +313,13 @@ do_build_and_run_docker() {
     contribute \
     --coordinator-url "$COORDINATOR_URL"
 
-  # Copy receipt to current directory before cleanup removes the temp dir
-  if [[ -f "${state_dir}/contribution-receipt.json" ]]; then
-    cp "${state_dir}/contribution-receipt.json" "${PWD}/contribution-receipt.json"
-    log_ok "Receipt copied to ${PWD}/contribution-receipt.json"
+  # Docker runs inside a temporary clone, so preserve the full local state
+  # directory before the outer script cleanup removes the working tree.
+  if [[ -d "${state_dir}" && -n "$(ls -A "${state_dir}" 2>/dev/null)" ]]; then
+    rm -rf "${PWD}/ceremony-state"
+    mkdir -p "${PWD}/ceremony-state"
+    cp -R "${state_dir}/." "${PWD}/ceremony-state/"
+    log_ok "Local contribution files copied to ${PWD}/ceremony-state"
   fi
 }
 

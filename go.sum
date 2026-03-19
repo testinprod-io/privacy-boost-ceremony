@@ -1,3 +1,5 @@
+github.com/SunnysidedJ/ptau-deserializer v0.0.0-20260302105558-52d7db2ff1f8 h1:b6EQ1jo3y49ejfeFoKMAAPhqoldJB5BDF1dmjwOBq6k=
+github.com/SunnysidedJ/ptau-deserializer v0.0.0-20260302105558-52d7db2ff1f8/go.mod h1:UM9hPBw0rLt3KGjfj3+HDS55zZ2YJOGV87GbQqG3QZ8=
 github.com/bits-and-blooms/bitset v1.24.0 h1:H4x4TuulnokZKvHLfzVRTHJfFfnHEeSYJizujEZvmAM=
 github.com/bits-and-blooms/bitset v1.24.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
@@ -37,6 +39,8 @@ github.com/rs/zerolog v1.34.0 h1:k43nTLIwcTVQAncfCw4KZ2VY6ukYoZaBPNOE8txlOeY=
 github.com/rs/zerolog v1.34.0/go.mod h1:bJsvje4Z08ROH4Nhs5iH600c3IkWhwp44iRc54W6wYQ=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/testinprod-io/privacy-boost-protocol v0.0.0-20260318200347-7b2a01864a70 h1:gbuEAYFYwj2OUKi4KGg3AHYkveUaRzjriN47Bdek0PA=
+github.com/testinprod-io/privacy-boost-protocol v0.0.0-20260318200347-7b2a01864a70/go.mod h1:EkBb3/6ue45eW0Io5rQK0z0q+IKA4JAp3sc+uCHV4oc=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 golang.org/x/crypto v0.47.0 h1:V6e3FRj+n4dbpw86FJ8Fv7XVOql7TEwpHapKoMJ/GO8=
